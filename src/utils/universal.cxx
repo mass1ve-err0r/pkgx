@@ -37,9 +37,13 @@ size_t compress_zstd(void* file_buffer, size_t file_sz, void* buffer)
     return outfile_sz;
 }
 
-size_t decompress_zstd(void* file_buffer, size_t file_sz, void* buffer)
+void get_decompression_size(void* file_buffer, size_t file_sz, size_t* buf_estimate)
 {
-    uint64_t buffer_sz = ZSTD_getFrameContentSize(file_buffer, file_sz);
+    *buf_estimate = ZSTD_getFrameContentSize(file_buffer, file_sz);
+}
+
+size_t decompress_zstd(void* file_buffer, size_t file_sz, void* buffer, size_t buffer_sz)
+{
     size_t output_sz = ZSTD_decompress(buffer, buffer_sz, file_buffer, file_sz);
     if (ZSTD_isError(output_sz)) {
         LOG(ERROR, "An error occurred during decompression with zstd!");
