@@ -51,3 +51,13 @@ size_t decompress_zstd(void* file_buffer, size_t file_sz, void* buffer, size_t b
     }
     return output_sz;
 }
+
+nlohmann::json get_json_from_buffer(char* buf)
+{
+    nlohmann::json json_obj = nlohmann::json::parse(buf, nullptr, false, false);
+    if (json_obj.is_discarded()) {
+        LOG(ERROR, "Layout data is corrupted!");
+        return NULL;
+    }
+    return json_obj;
+}
