@@ -24,11 +24,12 @@
 #define COLOR_CYAN "\x1B[36m"
 
 enum LOG_TYPE {
-    ERROR,
+    ERROR = 0,
     SUCCESS,
-    INFO
+    INFO,
+    INFO2
 };
-
+// ./pkgx -rc ../payload/test/test.pkgx conflicts
 
 // --------------------*  stdout macros  *--------------------
 template<typename ...Argument>
@@ -44,6 +45,11 @@ static inline void LOG(int type, Argument&& ...args)
             break;
         case INFO:
             std::cout << COLOR_BLUE << "[pkgx][•]: ";
+            break;
+        case INFO2:
+            std::cout << COLOR_CYAN << "[pkgx][•]: ";
+            break;
+        default:
             break;
     }
     (std::cout << ... << args);
