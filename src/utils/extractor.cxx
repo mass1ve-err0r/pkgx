@@ -35,6 +35,7 @@ char* get_decompressed_file(FILE* ptr, size_t buf_sz, size_t offset, size_t* rea
     char* buf_decompressed = new(std::nothrow) char[dec_sz];
     if (!buf_decompressed) {
         LOG(ERROR, "Failed to create decompression buffer!");
+        delete[] buf;
         return NULL;
     }
     *real_sz = decompress_zstd(buf, buf_sz, buf_decompressed, dec_sz);
@@ -44,18 +45,19 @@ char* get_decompressed_file(FILE* ptr, size_t buf_sz, size_t offset, size_t* rea
 
 bool extract_singular(FILE* ptr, pkgx_header_t* hdr, extraction_type_t et, const std::string& dst)
 {
+    bool rv = true;
     size_t decompresed_sz;
     FILE* out = NULL;
     char* decompressed_data = NULL;
     switch (et)
     {
         case EXTRACT_CONTROL:
-            LOG(INFO, "Extracting control file...");
+            LOG(INFO, "Extracting control...");
             decompressed_data = get_decompressed_file(ptr, hdr->control_sz, 0, &decompresed_sz);
             out = fopen((dst + "/_control.json").c_str(), "wb");
             break;
         case EXTRACT_LAYOUT:
-            LOG(INFO, "Extracting fs-layout file...");
+            LOG(INFO, "Extracting fs-layout...");
             decompressed_data = get_decompressed_file(ptr, hdr->layout_sz, hdr->control_sz, &decompresed_sz);
             out = fopen((dst + "/_layout.json").c_str(), "wb");
             break;
@@ -68,32 +70,48 @@ bool extract_singular(FILE* ptr, pkgx_header_t* hdr, extraction_type_t et, const
             LOG(ERROR, "Could NOT recognize extraction type!");
             return false;
     }
-    fwrite(decompressed_data, decompresed_sz, 1, out);
+    if (decompressed_data) {
+        fwrite(decompressed_data, decompresed_sz, 1, out);
+    } else {
+        LOG(ERROR, "Failed to get raw data! Aborting...");
+        rv = false;
+    }
     fclose(out);
     delete[] decompressed_data;
-    return true;
+    return rv;
 }
 
-bool extract_compactarchive(FILE* ptr, pkgx_header_t* hdr, const std::string& dst)
+bool extract_compactarchive(FILE* ptr, pkgx_header_t* hdr, const std::string& dst, bool from_fs = true)
 {
+    LOG(INFO, "Extracting compactarchive...");
+    bool rv = true;
     size_t compactarchive_sz;
     char* compactarchive_raw = get_decompressed_file(ptr, hdr->data_sz, (hdr->control_sz + hdr->layout_sz), &compactarchive_sz);
 
-    size_t layout_sz;
-    char* layout_buf = get_decompressed_file(ptr, hdr->layout_sz, hdr->control_sz, &layout_sz);
-    nlohmann::json layout_data = get_json_from_buffer(layout_buf);
+    char* layout_buf = NULL;
+    nlohmann::json layout_data;
+    if (from_fs) {
+        size_t layout_sz;
+        layout_buf = get_decompressed_file(ptr, hdr->layout_sz, hdr->control_sz, &layout_sz);
+        layout_data = get_json_from_buffer(layout_buf);
+    } else {
+        std::ifstream l(dst + "/_layout.json");
+        l >> layout_data;
+        l.close();
+    }
 
     std::vector<size_t> elements_sz;
     char** files = unpack_to_buffer(compactarchive_raw, &compactarchive_sz, elements_sz);
     if (!files) {
         LOG(ERROR, "Failed to get files from compactarchive!");
-        LOG(DEBUG, "files inside: ", elements_sz.size());
+        rv = false;
         goto ex_clean;
     }
     for (size_t i = 0; i < elements_sz.size(); ++i)
     {
         std::string filename = layout_data[i].at("name");
-        FILE* out = fopen((dst + "/" + filename).c_str(), "wb");
+        filename.insert(0, (dst + "/"));
+        FILE* out = fopen((filename).c_str(), "wb");
         fwrite(files[i], elements_sz[i], 1, out);
         fclose(out);
     }
@@ -105,7 +123,7 @@ ex_clean:
     delete[] compactarchive_raw;
     delete[] layout_buf;
     layout_data.clear();
-    return true;
+    return rv;
 }
 
 
@@ -151,7 +169,17 @@ bool extract(extraction_type_t ex_type, const std::string& origin, const std::st
         fclose(source);
         return rv;
     } else if (ex_type == EXTRACT_FULL) {
-        LOG(DEBUG, "called extract full");
+        rv = extract_singular(source, &header, EXTRACT_CONTROL, dest);
+        if (rv) {
+            bool rv2 = extract_singular(source, &header, EXTRACT_LAYOUT, dest);
+            if (rv2) {
+                bool rv3 = extract_compactarchive(source, &header, dest, false);
+                if (rv3) {
+                    fclose(source);
+                    return true;
+                } else { LOG(ERROR, "Failed on stage 3! Aborting..."); }
+            } else { LOG(ERROR, "Failed on stage 2! Aborting..."); }
+        } else { LOG(ERROR, "Failed on stage 1! Aborting..."); }
     } else {
         LOG(ERROR, "Extraction with invalid extraction_type !");
     }

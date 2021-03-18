@@ -13,6 +13,7 @@
 #include "compact_archive.hxx"
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 
 
 // --------------------*  defs  *--------------------
