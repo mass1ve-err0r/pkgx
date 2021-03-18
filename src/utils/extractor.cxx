@@ -19,30 +19,6 @@ bool create_directories(const std::string& path)
     }
 }
 
-char* get_decompressed_file(FILE* ptr, size_t buf_sz, size_t offset, size_t* real_sz)
-{
-    size_t loc_old = ftello(ptr);
-    char* buf = new(std::nothrow) char[buf_sz];
-    if (!buf) {
-        LOG(ERROR, "Failed to create buffer!");
-        return NULL;
-    }
-    fseeko(ptr, offset, SEEK_CUR);
-    fread(buf, buf_sz, 1, ptr);
-    fseeko(ptr, loc_old, SEEK_SET);
-    size_t dec_sz;
-    get_decompression_size(buf, buf_sz, &dec_sz);
-    char* buf_decompressed = new(std::nothrow) char[dec_sz];
-    if (!buf_decompressed) {
-        LOG(ERROR, "Failed to create decompression buffer!");
-        delete[] buf;
-        return NULL;
-    }
-    *real_sz = decompress_zstd(buf, buf_sz, buf_decompressed, dec_sz);
-    delete[] buf;
-    return buf_decompressed;
-}
-
 bool extract_singular(FILE* ptr, pkgx_header_t* hdr, extraction_type_t et, const std::string& dst)
 {
     bool rv = true;
@@ -53,17 +29,17 @@ bool extract_singular(FILE* ptr, pkgx_header_t* hdr, extraction_type_t et, const
     {
         case EXTRACT_CONTROL:
             LOG(INFO, "Extracting control...");
-            decompressed_data = get_decompressed_file(ptr, hdr->control_sz, 0, &decompresed_sz);
+            decompressed_data = get_file_decompressed(ptr, hdr->control_sz, 0, &decompresed_sz);
             out = fopen((dst + "/_control.json").c_str(), "wb");
             break;
         case EXTRACT_LAYOUT:
             LOG(INFO, "Extracting fs-layout...");
-            decompressed_data = get_decompressed_file(ptr, hdr->layout_sz, hdr->control_sz, &decompresed_sz);
+            decompressed_data = get_file_decompressed(ptr, hdr->layout_sz, hdr->control_sz, &decompresed_sz);
             out = fopen((dst + "/_layout.json").c_str(), "wb");
             break;
         case EXTRACT_DATA_RAW:
             LOG(INFO, "Extracting data (raw) ...");
-            decompressed_data = get_decompressed_file(ptr, hdr->data_sz, (hdr->control_sz + hdr->layout_sz), &decompresed_sz);
+            decompressed_data = get_file_decompressed(ptr, hdr->data_sz, (hdr->control_sz + hdr->layout_sz), &decompresed_sz);
             out = fopen((dst + "/data.compactarchive").c_str(), "wb");
             break;
         default:
@@ -83,16 +59,19 @@ bool extract_singular(FILE* ptr, pkgx_header_t* hdr, extraction_type_t et, const
 
 bool extract_compactarchive(FILE* ptr, pkgx_header_t* hdr, const std::string& dst, bool from_fs = true)
 {
-    LOG(INFO, "Extracting compactarchive...");
     bool rv = true;
-    size_t compactarchive_sz;
-    char* compactarchive_raw = get_decompressed_file(ptr, hdr->data_sz, (hdr->control_sz + hdr->layout_sz), &compactarchive_sz);
-
+    char* compactarchive_raw;
     char* layout_buf = NULL;
     nlohmann::json layout_data;
+    char** files = NULL;
+    LOG(INFO, "Extracting compactarchive...");
+
+    size_t compactarchive_sz;
+    compactarchive_raw = get_file_decompressed(ptr, hdr->data_sz, (hdr->control_sz + hdr->layout_sz), &compactarchive_sz);
+
     if (from_fs) {
         size_t layout_sz;
-        layout_buf = get_decompressed_file(ptr, hdr->layout_sz, hdr->control_sz, &layout_sz);
+        layout_buf = get_file_decompressed(ptr, hdr->layout_sz, hdr->control_sz, &layout_sz);
         layout_data = get_json_from_buffer(layout_buf);
     } else {
         std::ifstream l(dst + "/_layout.json");
@@ -101,25 +80,30 @@ bool extract_compactarchive(FILE* ptr, pkgx_header_t* hdr, const std::string& ds
     }
 
     std::vector<size_t> elements_sz;
-    char** files = unpack_to_buffer(compactarchive_raw, &compactarchive_sz, elements_sz);
+    files = unpack_to_buffer(compactarchive_raw, &compactarchive_sz, elements_sz);
     if (!files) {
         LOG(ERROR, "Failed to get files from compactarchive!");
         rv = false;
-        goto ex_clean;
+        goto cleanup;
     }
     for (size_t i = 0; i < elements_sz.size(); ++i)
     {
         std::string filename = layout_data[i].at("name");
         filename.insert(0, (dst + "/"));
         FILE* out = fopen((filename).c_str(), "wb");
+        if (!out) {
+            LOG(ERROR, "Could not create actual file for current element!");
+            rv = false;
+            goto cleanup;
+        }
         fwrite(files[i], elements_sz[i], 1, out);
         fclose(out);
     }
 
+cleanup:
     for (size_t i = 0; i < elements_sz.size(); ++i) { delete[] files[i]; }
     delete[] files;
     elements_sz.clear();
-ex_clean:
     delete[] compactarchive_raw;
     delete[] layout_buf;
     layout_data.clear();

@@ -53,6 +53,30 @@ char* get_file_compressed(const char* filename, size_t* real_sz)
     return buf_out;
 }
 
+char* get_file_decompressed(FILE* ptr, size_t buf_sz, size_t offset, size_t* real_sz)
+{
+    size_t loc_old = ftello(ptr);
+    char* buf = new(std::nothrow) char[buf_sz];
+    if (!buf) {
+        LOG(ERROR, "Failed to create buffer!");
+        return NULL;
+    }
+    fseeko(ptr, offset, SEEK_CUR);
+    fread(buf, buf_sz, 1, ptr);
+    fseeko(ptr, loc_old, SEEK_SET);
+    size_t dec_sz;
+    get_decompression_size(buf, buf_sz, &dec_sz);
+    char* buf_decompressed = new(std::nothrow) char[dec_sz];
+    if (!buf_decompressed) {
+        LOG(ERROR, "Failed to create decompression buffer!");
+        delete[] buf;
+        return NULL;
+    }
+    *real_sz = decompress_zstd(buf, buf_sz, buf_decompressed, dec_sz);
+    delete[] buf;
+    return buf_decompressed;
+}
+
 
 // --------------------*  compression  *--------------------
 

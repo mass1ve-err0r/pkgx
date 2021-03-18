@@ -19,6 +19,7 @@
 // --------------------*  funcs  *--------------------
 char* file_to_buffer(const char* filename, long* buffer_sz);
 char* get_file_compressed(const char* filename, size_t* real_sz);
+char* get_file_decompressed(FILE* ptr, size_t buf_sz, size_t offset, size_t* real_sz);
 size_t compress_zstd(void* file_buffer, size_t file_sz, void* buffer);
 void get_decompression_size(void* file_buffer, size_t file_sz, size_t* buf_estimate);
 size_t decompress_zstd(void* file_buffer, size_t file_sz, void* buffer, size_t buf_sz);
