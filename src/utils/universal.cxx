@@ -6,11 +6,13 @@
 #include "universal.hxx"
 
 
+// --------------------*  fs  *--------------------
+
 char* file_to_buffer(const char* filename, long* buffer_sz)
 {
     FILE* src = fopen(filename, "rb");
     if (!src) {
-        *buffer_sz = -1;
+        *buffer_sz = 0;
         return NULL;
     }
     fseeko(src, 0, SEEK_END);
@@ -18,13 +20,41 @@ char* file_to_buffer(const char* filename, long* buffer_sz)
     fseeko(src,  0, SEEK_SET);
     char* buffer = new(std::nothrow) char[*buffer_sz];
     if (!buffer) {
-        *buffer_sz = -2;    // buffer alloc failed
+        *buffer_sz = 0;
         return NULL;
     }
     fread(buffer, *buffer_sz, 1, src);
     fclose(src);
     return buffer;
 }
+
+
+char* get_file_compressed(const char* filename, size_t* real_sz)
+{
+    long buf_sz;
+    char* buf_in = file_to_buffer(filename, &buf_sz);
+    if (!buf_in) {
+        LOG(ERROR, "Could NOT load file into buffer!");
+        return NULL;
+    }
+    char* buf_out = new(std::nothrow) char[buf_sz];
+    if (!buf_out) {
+        LOG(ERROR, "Could NOT create output buffer!");
+        delete[] buf_in;
+        return NULL;
+    }
+    *real_sz = compress_zstd(buf_in, buf_sz, buf_out);
+    if (*real_sz == 0) {
+        delete[] buf_in;
+        delete[] buf_out;
+        return NULL;
+    }
+    delete[] buf_in;
+    return buf_out;
+}
+
+
+// --------------------*  compression  *--------------------
 
 size_t compress_zstd(void* file_buffer, size_t file_sz, void* buffer)
 {
@@ -51,6 +81,9 @@ size_t decompress_zstd(void* file_buffer, size_t file_sz, void* buffer, size_t b
     }
     return output_sz;
 }
+
+
+// --------------------*  JSON  *--------------------
 
 nlohmann::json get_json_from_buffer(char* buf)
 {
