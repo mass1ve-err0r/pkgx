@@ -58,7 +58,6 @@ char** unpack_to_buffer(char* compactarchive_buf, size_t* buf_sz, std::vector<si
     uint32_t sz;
     uint32_t elements;
     memcpy(&elements, compactarchive_buf+bpos, sizeof(uint32_t));
-    if (VERBOSE_OUTPUT_ENABLED) { LOG(DEBUG, "Elements inside: ", elements); }
     bpos += 4;
     char** buf = new char*[elements];
     while (true) {
@@ -67,7 +66,6 @@ char** unpack_to_buffer(char* compactarchive_buf, size_t* buf_sz, std::vector<si
         }
         sz = 0;
         memcpy(&sz, compactarchive_buf+bpos, sizeof(uint32_t));
-        if (VERBOSE_OUTPUT_ENABLED) { LOG(DEBUG, "Current element size: ", sz); }
         bpos += 4;
         buf[idx] = new char[sz];
         if (!buf[idx]) {

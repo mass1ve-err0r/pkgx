@@ -99,12 +99,6 @@ bool build(const std::string& origin, const std::string& dest)
     header->layout_sz = l_sz;
     header->data_sz = dr_sz;
 
-    if (VERBOSE_OUTPUT_ENABLED) {
-        LOG(DEBUG, "Compressed control size: ", c_sz);
-        LOG(DEBUG, "Compressed layout size: ", l_sz);
-        LOG(DEBUG, "Compressed data size: ", dr_sz);
-    }
-
     LOG(INFO, "Building package...");
     pkgx_file = fopen(dest.c_str(), "wb");
     if (!pkgx_file) {

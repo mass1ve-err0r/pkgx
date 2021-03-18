@@ -7,7 +7,6 @@
 #define PKGX_COMPACT_ARCHIVE_HXX
 
 // --------------------*  imports  *--------------------
-#include "../verbosity.hxx"
 #include "../helpers/terminal.hxx"
 #include <cstdint>
 #include <vector>
